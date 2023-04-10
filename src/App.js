@@ -83,10 +83,7 @@ async function mintWtmNFT(
         wtmPublicKey
       )
     );
-    console.log("createTokenAccountIx: ", createTokenAccountIx);
     transaction.add(createTokenAccountIx);
-  } else {
-    console.log("token account already exists");
   }
 
   const createTransferIx = createTransferInstruction(
@@ -95,7 +92,6 @@ async function mintWtmNFT(
     memePublicKey,
     1
   );
-  console.log("createTransferIx: ", createTransferIx);
   transaction.recentBlockhash = (
     await connection.getLatestBlockhash()
   ).blockhash
@@ -112,12 +108,22 @@ async function mintWtmNFT(
 
   const res = await provider.send(transaction);
   console.log("res: ", res);
+  const latestBlockHash = await connection.getLatestBlockhash();
+
+  await connection.confirmTransaction({
+    blockhash: latestBlockHash.blockhash,
+    lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
+    signature: res,
+  });
+  console.log("confirmed mint.");
   return;
 }
 
 function App() { 
   const [loaded, setLoaded] = useState(false);
   const [isChanging, setIsChanging] = useState(false);
+  const [isMinting, setIsMinting] = useState(false);
+  const [isMissingNftError, setIsMissingNftError] = useState(false);
   const [sendingChangeTransaction, setSendingChangeTransaction] = useState(false);
   const [currWtmImage, setCurrWtmImage] = useState(null);
   const [currWtmMessage, setCurrWtmMessage] = useState("");
@@ -126,6 +132,7 @@ function App() {
   const endpoint = web3.clusterApiUrl("mainnet-beta");
   const walletPhantom = new PhantomWalletAdapter();
   const connection = new Connection("https://rpc.helius.xyz/?api-key=b60951f5-4f7c-4400-bf33-fab766f192d2");
+  console.log("provider: ", getProvider());
   // walletPhantom.connect().then(res => {
   //   console.log("Phantom connected.");
   // }).catch(e => {
@@ -247,7 +254,7 @@ function App() {
     if (sendingChangeTransaction) {
       return (
         <Button variant="contained" style={{ marginTop: "1rem", marginRight: "1rem" }} sx={{ ":hover": { bgcolor: theme.palette.primary.main }, color: 'primary.dark', backgroundColor: 'primary.light' }} >
-          <CircularProgress style={{ marginRight: "1rem" }} />
+          <CircularProgress style={{ size: "0.2rem", marginRight: "1rem" }} />
           UPLOADING
         </Button>
       )
@@ -255,6 +262,39 @@ function App() {
     return (
         <Button variant="contained" style={{ marginTop: "1rem", marginRight: "1rem" }} sx={{ ":hover": { bgcolor: theme.palette.primary.main }, color: 'primary.dark', backgroundColor: 'primary.light' }} onClick={changeTheMemeButtonClick}>CHANGE THE MEME</Button>
     )
+  }
+
+  const callMintWtmNFT = async () => {
+    setIsMinting(true);
+    setIsMissingNftError(false);
+    try {
+      await mintWtmNFT();
+    } catch (e) {
+      console.log("Error minting: ", e);
+    }
+    setIsMinting(false);
+  }
+
+  const handleChangeClick = async () => {
+    setIsMissingNftError(false);
+    const provider = getProvider();
+    let accounts = await provider.connection.getTokenAccountsByOwner(
+      provider.publicKey,
+      {
+        mint: new PublicKey(wtmMintAddress)
+      }
+    );
+
+    if (accounts && accounts.value[0] && accounts.value[0].pubkey) {
+      let balance = await provider.connection.getTokenAccountBalance(
+        accounts.value[0].pubkey
+      )
+      if (balance && balance.value && balance.value.amount >= 1) {
+        setIsChanging(true);
+        return;
+      }
+    }
+    setIsMissingNftError(true);
   }
 
   const bottomSection = () => {
@@ -278,13 +318,32 @@ function App() {
           </div>
         )
       }
-      return (
-        <span>
-          {/* TODO: disable on minted out */}
-          <Button variant="contained" style={{ marginTop: "1rem", marginRight: "1rem" }} sx={{ ":hover": { bgcolor: theme.palette.primary.main }, color: 'primary.dark', backgroundColor: 'primary.light' }} onClick={mintWtmNFT}>MINT</Button>
-          <Button variant="contained" style={{ marginTop: "1rem", marginRight: "1rem" }} sx={{ ":hover": { bgcolor: theme.palette.primary.main }, color: 'primary.dark', backgroundColor: 'primary.light' }} onClick={() => setIsChanging(true)}>CHANGE</Button>
-        </span>
-      )
+      if (isMinting) {
+        return (
+          <span>
+            {/* TODO: disable on minted out */}
+            <Button variant="contained" style={{ marginTop: "1rem", marginRight: "1rem" }} sx={{ ":hover": { bgcolor: theme.palette.primary.main }, color: 'primary.dark', backgroundColor: 'primary.light' }} onClick={callMintWtmNFT}>
+              <CircularProgress style={{ marginRight: "1rem" }} />
+              MINT
+            </Button>
+            <Button variant="contained" style={{ marginTop: "1rem", marginRight: "1rem" }} sx={{ ":hover": { bgcolor: theme.palette.primary.main }, color: 'primary.dark', backgroundColor: 'primary.light' }} onClick={() => handleChangeClick()}>CHANGE</Button>
+            <div>
+              {isMissingNftError ? <Typography color={"#ff0033"} sx={{ pt: 0.5, pb: 1, mb: 5 }} variant="caption" fontWeight="bold">MISSING WTM NFT</Typography> : <span/>}
+            </div>
+          </span>
+        )
+      } else {
+        return (
+          <span>
+            {/* TODO: disable on minted out */}
+            <Button variant="contained" style={{ marginTop: "1rem", marginRight: "1rem" }} sx={{ ":hover": { bgcolor: theme.palette.primary.main }, color: 'primary.dark', backgroundColor: 'primary.light' }} onClick={callMintWtmNFT}>MINT</Button>
+            <Button variant="contained" style={{ marginTop: "1rem", marginRight: "1rem" }} sx={{ ":hover": { bgcolor: theme.palette.primary.main }, color: 'primary.dark', backgroundColor: 'primary.light' }} onClick={() => handleChangeClick()}>CHANGE</Button>
+            <div>
+              {isMissingNftError ? <Typography color={"#ff0033"} sx={{ pt: 0.5, pb: 1, mb: 5 }} variant="caption" fontWeight="bold">MISSING WTM NFT</Typography> : <span/>}
+            </div>
+          </span>
+        )
+      }
     }
     return (
       <span>
