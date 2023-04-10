@@ -9,6 +9,7 @@
 
 .currMeme {
   max-width: 300px;
+  max-height: 256px;
 }
 
 @media (prefers-reduced-motion: no-preference) {
